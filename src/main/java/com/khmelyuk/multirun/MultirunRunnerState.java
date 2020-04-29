@@ -7,7 +7,7 @@ import com.intellij.execution.configurations.RunnableState;
 import com.intellij.execution.impl.RunDialog;
 import com.intellij.execution.impl.RunManagerImpl;
 import com.intellij.execution.impl.RunnerAndConfigurationSettingsImpl;
-import com.intellij.execution.process.ProcessAdapter;
+import com.intellij.execution.process.CapturingProcessAdapter;
 import com.intellij.execution.process.ProcessEvent;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.runners.ExecutionEnvironment;
@@ -15,8 +15,6 @@ import com.intellij.execution.runners.ExecutionUtil;
 import com.intellij.execution.runners.ProgramRunner;
 import com.intellij.execution.ui.RunContentDescriptor;
 import com.intellij.icons.AllIcons;
-import com.intellij.internal.statistic.UsageTrigger;
-import com.intellij.internal.statistic.beans.ConvertUsagesUtil;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.impl.ActionManagerImpl;
 import com.intellij.openapi.application.ApplicationManager;
@@ -25,6 +23,7 @@ import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.LayeredIcon;
 import com.intellij.ui.content.Content;
@@ -33,25 +32,36 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-/** @author Ruslan Khmelyuk */
+/**
+ * @author Ruslan Khmelyuk
+ */
 public class MultirunRunnerState implements RunnableState {
 
+    private int lastStartedIndex = -1;
     private int delayTime;
     private boolean separateTabs;
     private boolean startOneByOne;
+    private boolean startAfterTermination;
+    private String containsRegex;
     private boolean markFailedProcess;
     private boolean hideSuccessProcess = true;
     private List<RunConfiguration> runConfigurations;
     private StopRunningMultirunConfigurationsAction stopRunningMultirunConfiguration;
 
     public MultirunRunnerState(List<RunConfiguration> runConfigurations,
-                               boolean startOneByOne, int delayTime, boolean separateTabs,
+                               boolean startOneByOne, int delayTime,
+                               boolean startAfterTermination, String containsRegex,
+                               boolean separateTabs,
                                boolean markFailedProcess, boolean hideSuccessProcess) {
 
         this.delayTime = delayTime;
         this.separateTabs = separateTabs;
         this.startOneByOne = startOneByOne;
+        this.startAfterTermination = startAfterTermination;
+        this.containsRegex = containsRegex;
         this.runConfigurations = runConfigurations;
         this.markFailedProcess = markFailedProcess;
         this.hideSuccessProcess = hideSuccessProcess;
@@ -69,6 +79,10 @@ public class MultirunRunnerState implements RunnableState {
     }
 
     private void runConfigurations(final Executor executor, final List<RunConfiguration> runConfigurations, final int index) {
+        if (index <= lastStartedIndex) {
+            return;
+        }
+        lastStartedIndex = index;
         if (index >= runConfigurations.size()) {
             stopRunningMultirunConfiguration.doneStaringConfigurations();
             return;
@@ -107,7 +121,7 @@ public class MultirunRunnerState implements RunnableState {
 
                     final ProcessHandler processHandler = descriptor.getProcessHandler();
                     if (processHandler != null) {
-                        processHandler.addProcessListener(new ProcessAdapter() {
+                        processHandler.addProcessListener(new CapturingProcessAdapter() {
                             @SuppressWarnings("ConstantConditions")
                             @Override
                             public void startNotified(ProcessEvent processEvent) {
@@ -138,15 +152,25 @@ public class MultirunRunnerState implements RunnableState {
                                 }
                             }
 
-                            @Override public void processTerminated(final ProcessEvent processEvent) {
+                            @Override
+                            public void processTerminated(final ProcessEvent processEvent) {
                                 onTermination(processEvent, true);
                             }
 
-                            @Override public void processWillTerminate(ProcessEvent processEvent, boolean willBeDestroyed) {
+                            @Override
+                            public void processWillTerminate(ProcessEvent processEvent, boolean willBeDestroyed) {
                                 onTermination(processEvent, false);
                             }
 
                             private void onTermination(final ProcessEvent processEvent, final boolean terminated) {
+                                final boolean completedSuccessfully = (terminated && processEvent.getExitCode() == 0);
+                                if (completedSuccessfully && startAfterTermination) {
+                                    ApplicationManager.getApplication().invokeLater(new Runnable() {
+                                        public void run() {
+                                            runConfigurations(executor, runConfigurations, index + 1);
+                                        }
+                                    });
+                                }
                                 if (descriptor.getAttachedContent() == null) {
                                     return;
                                 }
@@ -189,6 +213,23 @@ public class MultirunRunnerState implements RunnableState {
                                     }
                                 });
                             }
+
+                            @Override
+                            public void onTextAvailable(@NotNull ProcessEvent event, @NotNull Key outputType) {
+                                super.onTextAvailable(event, outputType);
+                                if (StringUtil.isNotEmpty(containsRegex)) {
+                                    Pattern p = Pattern.compile(containsRegex);
+                                    Matcher m = p.matcher(this.getOutput().getStdout());
+                                    boolean runNext = m.find();
+                                    if (runNext) {
+                                        ApplicationManager.getApplication().invokeLater(new Runnable() {
+                                            public void run() {
+                                                runConfigurations(executor, runConfigurations, index + 1);
+                                            }
+                                        });
+                                    }
+                                }
+                            }
                         });
                     }
                     stopRunningMultirunConfiguration.addProcess(project, processHandler);
@@ -207,7 +248,7 @@ public class MultirunRunnerState implements RunnableState {
                                                 return;
                                             }
                                             final long passed = (System.currentTimeMillis() - start) / 1000;
-                                            final String seconds = (delayTime - passed == 1)  ? "second" : "seconds";
+                                            final String seconds = (delayTime - passed == 1) ? "second" : "seconds";
                                             progressIndicator.setFraction((double) passed / delayTime);
                                             progressIndicator.setText("waiting " + (delayTime - passed) + " " + seconds);
                                             Thread.sleep(1000);
@@ -223,7 +264,9 @@ public class MultirunRunnerState implements RunnableState {
                                 }
                             });
                         } else {
-                            runConfigurations(executor, runConfigurations, index + 1);
+                            if (!startAfterTermination && StringUtil.isEmpty(containsRegex)) {
+                                runConfigurations(executor, runConfigurations, index + 1);
+                            }
                         }
                     }
                 }
@@ -245,7 +288,7 @@ public class MultirunRunnerState implements RunnableState {
     private void runTriggers(Executor executor, RunnerAndConfigurationSettings configuration) {
         final ConfigurationType configurationType = configuration.getType();
         if (configurationType != null) {
-            UsageTrigger.trigger("execute." + ConvertUsagesUtil.ensureProperKey(configurationType.getId()) + "." + executor.getId());
+            //UsageTrigger.trigger("execute." + ConvertUsagesUtil.ensureProperKey(configurationType.getId()) + "." + executor.getId());
         }
     }
 
@@ -266,8 +309,8 @@ public class MultirunRunnerState implements RunnableState {
 
             while (!RunManagerImpl.canRunConfiguration(configuration, executor)) {
                 if (0 == Messages.showYesNoDialog(project, "Configuration is still incorrect. Do you want to edit it again?",
-                                                  "Change Configuration Settings",
-                                                  "Edit", "Continue Anyway", Messages.getErrorIcon())) {
+                        "Change Configuration Settings",
+                        "Edit", "Continue Anyway", Messages.getErrorIcon())) {
                     if (!RunDialog.editConfiguration(project, configuration, "Edit configuration", executor)) {
                         break;
                     }

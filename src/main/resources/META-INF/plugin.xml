@@ -1,7 +1,7 @@
 <idea-plugin version="2">
-    <id>com.khmelyuk.multirun</id>
-    <name>Multirun</name>
-    <version>1.5</version>
+    <id>com.thearchtiect.multirun</id>
+    <name>Advanced Multirun</name>
+    <version>1.0</version>
     <vendor url="http://www.khmelyuk.com">Ruslan Khmelyuk</vendor>
 
     <description>
@@ -127,7 +127,7 @@
     </change-notes>
 
     <!-- please see http://confluence.jetbrains.net/display/IDEADEV/Build+Number+Ranges for description -->
-    <idea-version since-build="142.0000" until-build="163.*"/>
+    <idea-version since-build="191.0000"/>
 
     <!-- please see http://confluence.jetbrains.net/display/IDEADEV/Plugin+Compatibility+with+IntelliJ+Platform+Products
          on how to target different products -->

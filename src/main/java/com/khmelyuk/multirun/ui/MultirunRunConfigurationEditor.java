@@ -35,6 +35,8 @@ public class MultirunRunConfigurationEditor extends SettingsEditor<MultirunRunCo
     private JPanel collectionsPanel;
     private JCheckBox reuseTabs;
     private JCheckBox startOneByOne;
+    private JCheckBox startAfterTermination;
+    private JTextField containsRegex;
     private JCheckBox markFailedProcess;
     private JCheckBox hideSuccessProcess;
     private JCheckBox configurationsListChanged;
@@ -77,6 +79,8 @@ public class MultirunRunConfigurationEditor extends SettingsEditor<MultirunRunCo
         delayTime.setText(String.valueOf(multirunRunConfiguration.getDelayTime()));
         reuseTabs.setSelected(!multirunRunConfiguration.isSeparateTabs());
         startOneByOne.setSelected(multirunRunConfiguration.isStartOneByOne());
+        startAfterTermination.setSelected(multirunRunConfiguration.isStartAfterTermination());
+        containsRegex.setText(multirunRunConfiguration.getContainsRegex());
         markFailedProcess.setSelected(multirunRunConfiguration.isMarkFailedProcess());
         hideSuccessProcess.setSelected(multirunRunConfiguration.isHideSuccessProcess());
     }
@@ -85,6 +89,8 @@ public class MultirunRunConfigurationEditor extends SettingsEditor<MultirunRunCo
     protected void applyEditorTo(MultirunRunConfiguration multirunRunConfiguration) throws ConfigurationException {
         multirunRunConfiguration.setSeparateTabs(!reuseTabs.isSelected());
         multirunRunConfiguration.setStartOneByOne(startOneByOne.isSelected());
+        multirunRunConfiguration.setStartAfterTermination(startAfterTermination.isSelected());
+        multirunRunConfiguration.setContainsRegex(containsRegex.getText());
         multirunRunConfiguration.setMarkFailedProcess(markFailedProcess.isSelected());
         multirunRunConfiguration.setHideSuccessProcess(hideSuccessProcess.isSelected());
         int delayTimeSeconds = 0;

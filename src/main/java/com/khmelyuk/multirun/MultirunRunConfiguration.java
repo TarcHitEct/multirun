@@ -22,6 +22,8 @@ public class MultirunRunConfiguration extends RunConfigurationBase {
 
     public static final String PROP_SEPARATE_TABS = "separateTabs";
     public static final String PROP_START_ONE_BY_ONE = "startOneByOne";
+    public static final String PROP_START_AFTER_TERMINATION = "startAfterTermination";
+    public static final String PROP_CONTAINS_REGEX = "containsRegex";
     public static final String PROP_MARK_FAILED_PROCESS = "markFailedProcess";
     public static final String PROP_HIDE_SUCCESS_PROCESS = "hideSuccessProcess";
     public static final String PROP_DELAY_TIME = "delayTime";
@@ -29,6 +31,8 @@ public class MultirunRunConfiguration extends RunConfigurationBase {
     private int delayTime = 0;
     private boolean separateTabs = true;
     private boolean startOneByOne = true;
+    private boolean startAfterTermination = false;
+    private String containsRegex = "";
     private boolean markFailedProcess = true;
     private boolean hideSuccessProcess = false;
     private List<RunConfigurationInternal> runConfigurations = new ArrayList<RunConfigurationInternal>();
@@ -40,7 +44,7 @@ public class MultirunRunConfiguration extends RunConfigurationBase {
     public List<RunConfiguration> getRunConfigurations() {
         final List<RunConfiguration> result = new ArrayList<RunConfiguration>();
         final RunConfiguration[] allConfigurations = RunManager.getInstance(getProject()).getAllConfigurations();
-        for (RunConfigurationInternal runConfiguration: runConfigurations) {
+        for (RunConfigurationInternal runConfiguration : runConfigurations) {
             for (RunConfiguration configuration : allConfigurations) {
                 if (configuration.getName().equals(runConfiguration.name) &&
                         configuration.getType().getDisplayName().equals(runConfiguration.type)) {
@@ -68,7 +72,7 @@ public class MultirunRunConfiguration extends RunConfigurationBase {
             return;
         }
 
-        for(RunConfiguration configuration: runConfigurations) {
+        for (RunConfiguration configuration : runConfigurations) {
             this.runConfigurations.add(new RunConfigurationInternal(configuration.getName(), configuration.getType().getDisplayName()));
         }
     }
@@ -128,6 +132,12 @@ public class MultirunRunConfiguration extends RunConfigurationBase {
         if (element.getAttributeValue(PROP_START_ONE_BY_ONE) != null) {
             startOneByOne = Boolean.parseBoolean(element.getAttributeValue(PROP_START_ONE_BY_ONE));
         }
+        if (element.getAttributeValue(PROP_START_AFTER_TERMINATION) != null) {
+            startAfterTermination = Boolean.parseBoolean(element.getAttributeValue(PROP_START_AFTER_TERMINATION));
+        }
+        if (element.getAttributeValue(PROP_CONTAINS_REGEX) != null) {
+            containsRegex = element.getAttributeValue(PROP_CONTAINS_REGEX);
+        }
         if (element.getAttributeValue(PROP_MARK_FAILED_PROCESS) != null) {
             markFailedProcess = Boolean.parseBoolean(element.getAttributeValue(PROP_MARK_FAILED_PROCESS));
         }
@@ -147,7 +157,7 @@ public class MultirunRunConfiguration extends RunConfigurationBase {
                 continue;
             }
             runConfigurations.add(new RunConfigurationInternal(eachElement.getAttributeValue("name"),
-                                                               eachElement.getAttributeValue("type")));
+                    eachElement.getAttributeValue("type")));
         }
     }
 
@@ -157,6 +167,8 @@ public class MultirunRunConfiguration extends RunConfigurationBase {
 
         element.setAttribute(PROP_SEPARATE_TABS, String.valueOf(separateTabs));
         element.setAttribute(PROP_START_ONE_BY_ONE, String.valueOf(startOneByOne));
+        element.setAttribute(PROP_START_AFTER_TERMINATION, String.valueOf(startAfterTermination));
+        element.setAttribute(PROP_CONTAINS_REGEX, containsRegex);
         element.setAttribute(PROP_MARK_FAILED_PROCESS, String.valueOf(markFailedProcess));
         element.setAttribute(PROP_HIDE_SUCCESS_PROCESS, String.valueOf(hideSuccessProcess));
         element.setAttribute(PROP_DELAY_TIME, String.valueOf(delayTime));
@@ -173,20 +185,20 @@ public class MultirunRunConfiguration extends RunConfigurationBase {
 
     @Nullable
     @Override
-    public ConfigurationPerRunnerSettings createRunnerSettings( ConfigurationInfoProvider configurationInfoProvider ) {
+    public ConfigurationPerRunnerSettings createRunnerSettings(ConfigurationInfoProvider configurationInfoProvider) {
         return null;
     }
 
     @Nullable
     @Override
-    public SettingsEditor<ConfigurationPerRunnerSettings> getRunnerSettingsEditor( ProgramRunner programRunner ) {
+    public SettingsEditor<ConfigurationPerRunnerSettings> getRunnerSettingsEditor(ProgramRunner programRunner) {
         return null;
     }
 
     @Nullable
     @Override
     public RunProfileState getState(@NotNull Executor executor, @NotNull ExecutionEnvironment executionEnvironment) throws ExecutionException {
-        return new MultirunRunnerState(getRunConfigurations(), startOneByOne, delayTime, separateTabs, markFailedProcess, hideSuccessProcess);
+        return new MultirunRunnerState(getRunConfigurations(), startOneByOne, delayTime, startAfterTermination, containsRegex, separateTabs, markFailedProcess, hideSuccessProcess);
     }
 
     @Override
@@ -194,6 +206,22 @@ public class MultirunRunConfiguration extends RunConfigurationBase {
         if (runConfigurations.isEmpty()) {
             throw new RuntimeConfigurationError("No run configuration chosen");
         }
+    }
+
+    public boolean isStartAfterTermination() {
+        return startAfterTermination;
+    }
+
+    public void setStartAfterTermination(boolean startAfterTermination) {
+        this.startAfterTermination = startAfterTermination;
+    }
+
+    public String getContainsRegex() {
+        return containsRegex;
+    }
+
+    public void setContainsRegex(String containsRegex) {
+        this.containsRegex = containsRegex;
     }
 
     private static class RunConfigurationInternal {
